@@ -1,148 +1,547 @@
-console.log('Three Object', THREE);
+if (!Detector.webgl) {
+  //if no support for WebGL
+  alert('Your browser does not support WebGL!');
+} else {
+  var gal = {
+    scene: new THREE.Scene(),
+    camera: new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000
+    ),
+    renderer: new THREE.WebGLRenderer({ antialias: false }),
+    raycaster: new THREE.Raycaster(),
+    mouse: new THREE.Vector2(),
+    raycastSetUp: function () {
+      gal.mouse.x = 0.5 * 2 - 1;
+      gal.mouse.y = 0.5 * 2 + 1;
+    },
+    boot: function () {
+      //renderer time delta
+      gal.prevTime = performance.now();
 
-const scene = new THREE.Scene(); // create a new scene
+      gal.initialRender = true;
 
-// Create a camera, which defines where we're looking at.
-const camera = new THREE.PerspectiveCamera(
-  75, // Field of view
-  window.innerWidth / window.innerHeight, // aspect ratio
-  0.1, // near clipping plane
-  1000 // far clipping plane
-);
-scene.add(camera); // add the camera to the scene
-camera.position.z = 5; // move camera back 5 units
+      gal.scene.fog = new THREE.FogExp2(0x666666, 0.025);
 
-// Create a render and set the size and background color
-const renderer = new THREE.WebGLRenderer({ antialias: false }); // antialias means smooth edges
-renderer.setSize(window.innerWidth, window.innerHeight); // set size of renderer
-renderer.setClearColor(0xffffff, 1); //background color
-document.body.appendChild(renderer.domElement); // add renderer to html
+      gal.renderer.setSize(window.innerWidth, window.innerHeight);
+      gal.renderer.setClearColor(0xffffff, 1);
+      document.body.appendChild(gal.renderer.domElement);
 
-// Ambient light is a soft light that lights up all the objects in the scene equally
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.0); // color, intensity, distance, decay
-ambientLight.position = camera.position; //light follows camera
-scene.add(ambientLight);
+      gal.userBoxGeo = new THREE.BoxGeometry(2, 1, 2);
+      gal.userBoxMat = new THREE.MeshBasicMaterial({
+        color: 0xeeee99,
+        wireframe: true,
+      });
+      gal.user = new THREE.Mesh(gal.userBoxGeo, gal.userBoxMat);
 
-// Directional light is a light source that acts like the sun, that illuminates all objects in the scene equally from a specific direction.
-const sunLight = new THREE.DirectionalLight(0xdddddd, 1.0); // color, intensity, distance, decay
-sunLight.position.y = 15;
-scene.add(sunLight);
+      //invisible since this will solely be used to determine the size
+      //of the bounding box of our boxcollider for the user
+      gal.user.visible = false;
 
-const geometry = new THREE.BoxGeometry(1, 1, 1); // BoxGeometry is the shape of the object
-const material = new THREE.MeshBasicMaterial({ color: 'blue' }); // MeshBasicMaterial is the look of the object (color or texture)
-const cube = new THREE.Mesh(geometry, material); // create cube with geometry and material
-scene.add(cube); // add cube to scene
+      //making Bounding Box and HelperBox
+      //boundingbox is used for collisions, Helper box just makes it easier to debug
+      gal.user.BBox = new THREE.Box3();
 
-// Controls
-// Event Listenet for when we press the keys
-document.addEventListener('keydown', onKeyDown, false);
+      //make our collision object a child of the camera
+      gal.camera.add(gal.user);
 
-// Texture of the floor
-const floorTexture = new THREE.ImageUtils.loadTexture('img/Floor.jpg'); // ImageUtils is deprecated in the newer versions of THREE.js
-floorTexture.wrapS = THREE.RepeatWrapping; // wrapS is horizonatl direction
-floorTexture.wrapT = THREE.RepeatWrapping; // wrapT the vertical direction
-floorTexture.repeat.set(20, 20); // how many times to repeat the texture
+      gal.controls = new THREE.PointerLockControls(gal.camera);
+      gal.scene.add(gal.controls.getObject());
 
-// let floorTexture = new THREE.TextureLoader().load('img/Floor.jpg');
-// textureLoader.load('img/Floor.jpg');cds
+      gal.pastX = gal.controls.getObject().position.x;
+      gal.pastZ = gal.controls.getObject().position.z;
 
-// Create the floor plane.
-const planeGeometry = new THREE.PlaneBufferGeometry(45, 45); // BoxGeometry is the shape of the object
-const planeMaterial = new THREE.MeshBasicMaterial({ // MeshBasicMaterial is the look of the object (color or texture)
-  map: floorTexture, // the texture
-  side: THREE.DoubleSide,
-});
+      gal.canvas = document.querySelector('canvas');
+      gal.canvas.className = 'gallery';
 
-const floorPlane = new THREE.Mesh(planeGeometry, planeMaterial); // create the floor with geometry and material
+      //Clicking on either of these will start the game
+      gal.bgMenu = document.querySelector('#background_menu');
+      gal.play = document.querySelector('#play_button');
 
-floorPlane.rotation.x = Math.PI / 2; // this is 90 degrees
-floorPlane.position.y = -Math.PI; // this is -180 degrees
+      //enabling/disabling menu based on pointer controls
+      gal.menu = document.getElementById('menu');
 
-scene.add(floorPlane); // add the floor to the scene
+      //only when pointer is locked will translation controls be allowed: gal.controls.enabled
+      gal.moveVelocity = new THREE.Vector3();
+      gal.jump = true;
+      gal.moveForward = false;
+      gal.moveBackward = false;
+      gal.moveLeft = false;
+      gal.moveRight = false;
 
-// Create the walls
-let wallGroup = new THREE.Group(); // create a group to hold the walls
-scene.add(wallGroup); // add the group to the scene, then any child added to the group will display to the scene too
+      //Resize if window size change!
+      window.addEventListener('resize', function () {
+        gal.renderer.setSize(window.innerWidth, window.innerHeight);
+        gal.camera.aspect = window.innerWidth / window.innerHeight;
+        gal.camera.updateProjectionMatrix();
+      });
+    },
 
-// Front Wall
-const frontWall = new THREE.Mesh( // Mesh class that has geometry and material inside
-  new THREE.BoxGeometry(50, 20, 0.001), // geometry
-  new THREE.MeshLambertMaterial({ color: 'green' }) // Lambert material is for non-shiny surfaces 
-);
+    pointerControls: function () {
+      // Pointer Lock Controls & Full Screen
+      //https://developer.mozilla.org/en-US/docs/Web/API/Pointer_Lock_API
+      //gal.controls;
+      //if pointer lock supported in browser:
+      if (
+        'pointerLockElement' in document ||
+        'mozPointerLockElement' in document ||
+        'webkitPointerLockElement' in document
+      ) {
+        //assign the API functions for pointer lock based on browser
+        gal.canvas.requestPointerLock =
+          gal.canvas.requestPointerLock ||
+          gal.canvas.mozRequestPointerLock ||
+          gal.canvas.webkitRequestPointerLock;
+        //run this function to escape pointer Lock
+        gal.canvas.exitPointerLock =
+          gal.canvas.exitPointerLock ||
+          gal.canvas.mozExitPointerLock ||
+          gal.canvas.webkitExitPointerLock;
 
-frontWall.position.z = -20; // push the wall forward in the Z axis
+        //https://developer.mozilla.org/en-US/docs/Web/API/Fullscreen_API
+        //https://developer.mozilla.org/en-US/docs/Web/API/EventTarget/addEventListener
+        document.addEventListener('keydown', function (e) {
+          if (e.keyCode === 102 || e.keyCode === 70) {
+            //F/f for fullscreen mode
+            gal.toggleFullscreen();
+            //refer to below event listener:
+            gal.canvas.requestPointerLock();
+          }
+        });
 
-// Left Wall
-const leftWall = new THREE.Mesh( // Mesh class that has geometry and material inside
-  new THREE.BoxGeometry(50, 20, 0.001), // geometry
-  new THREE.MeshLambertMaterial({ //  Lambert material is for non-shiny surfaces 
-    color: 'red',
-  })
-);
+        /*Order of executions:
+				gal.canvas "click" -> "pointerlockchange" -> gl.changeCallback
+				-> listen to mouse movement and locked
 
-leftWall.rotation.y = Math.PI / 2; // this is 90 degrees
-leftWall.position.x = -20; // -20 is for 20 units left
+				ESC key -> "pointerlockchange" -> gl.changeCallback -> unlocked
+				now listen to when the canvas is clicked on
+				*/
+        /* Following is unclickable since it's covered by bgMenu div
+				gal.canvas.addEventListener("click", function() {
+					gal.canvas.requestPointerLock();
+				});
+                */
+        gal.bgMenu.addEventListener('click', function () {
+          gal.canvas.requestPointerLock();
+        });
+        gal.play.addEventListener('click', function () {
+          let web3 = new Web3(window.ethereum);
+          web3.eth.requestAccounts().then((account)=> {
+            console.log(account)
+            //call items here
+            gal.canvas.requestPointerLock();
+          });
+          //
+        });
 
-// Right Wall
-const rightWall = new THREE.Mesh( // Mesh class that has geometry and material inside
-  new THREE.BoxGeometry(50, 20, 0.001), // geometry
-  new THREE.MeshLambertMaterial({ // Lambert material is for non-shiny surfaces 
-    color: 'yellow',
-  })
-);
+        //pointer lock state change listener
+        document.addEventListener(
+          'pointerlockchange',
+          gal.changeCallback,
+          false
+        );
+        document.addEventListener(
+          'mozpointerlockchange',
+          gal.changeCallback,
+          false
+        );
+        document.addEventListener(
+          'webkitpointerlockchange',
+          gal.changeCallback,
+          false
+        );
 
-rightWall.position.x = 20;
-rightWall.rotation.y = Math.PI / 2; // this is 90 degrees
+        document.addEventListener('pointerlockerror', gal.errorCallback, false);
+        document.addEventListener(
+          'mozpointerlockerror',
+          gal.errorCallback,
+          false
+        );
+        document.addEventListener(
+          'webkitpointerlockerror',
+          gal.errorCallback,
+          false
+        );
+      } else {
+        alert('Your browser does not support the Pointer Lock API');
+      }
+    },
 
-wallGroup.add(frontWall, leftWall, rightWall);
+    changeCallback: function (event) {
+      if (
+        document.pointerLockElement === gal.canvas ||
+        document.mozPointerLockElement === gal.canvas ||
+        document.webkitPointerLockElement === gal.canvas
+      ) {
+        //pointer is disabled by element
+        gal.controls.enabled = true;
+        //remove menu element from screen
+        gal.menu.className += ' hide';
+        gal.bgMenu.className += ' hide';
+        //start mouse move listener
+        document.addEventListener('mousemove', gal.moveCallback, false);
+      } else {
+        //pointer is no longer disabled
+        gal.controls.enabled = false;
+        //remove hidden property from menu
+        gal.menu.className = gal.menu.className.replace(
+          /(?:^|\s)hide(?!\S)/g,
+          ''
+        );
+        gal.bgMenu.className = gal.bgMenu.className.replace(
+          /(?:^|\s)hide(?!\S)/g,
+          ''
+        );
+        document.removeEventListener('mousemove', gal.moveCallback, false);
+      }
+    },
 
-// Loop through each wall and create the bounding box
-for (let i = 0; i < wallGroup.children.length; i++) {
-  wallGroup.children[i].BBox = new THREE.Box3();
-  wallGroup.children[i].BBox.setFromObject(wallGroup.children[i]);
+    errorCallback: function (event) {
+      alert('Pointer Lock Failed');
+    },
+
+    moveCallback: function (event) {
+      //now that pointer disabled, we get the movement in x and y pos of the mouse
+      var movementX =
+        event.movementX || event.mozMovementX || event.webkitMovementX || 0;
+      var movementY =
+        event.movementY || event.mozMovementY || event.webkitMovementY || 0;
+    },
+
+    toggleFullscreen: function () {
+      if (
+        !document.fullscreenElement &&
+        !document.mozFullScreenElement &&
+        !document.webkitFullscreenElement &&
+        !document.msFullscreenElement
+      ) {
+        // current working methods
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen();
+        } else if (document.documentElement.msRequestFullscreen) {
+          document.documentElement.msRequestFullscreen();
+        } else if (document.documentElement.mozRequestFullScreen) {
+          document.documentElement.mozRequestFullScreen();
+        } else if (document.documentElement.webkitRequestFullscreen) {
+          document.documentElement.webkitRequestFullscreen(
+            Element.ALLOW_KEYBOARD_INPUT
+          );
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        } else if (document.mozCancelFullScreen) {
+          document.mozCancelFullScreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+      }
+    },
+
+    movement: function () {
+      document.addEventListener('keydown', function (e) {
+        if (e.keyCode === 87 || e.keyCode === 38) {
+          //w or UP
+          gal.moveForward = true;
+        } else if (e.keyCode === 65 || e.keyCode === 37) {
+          //A or LEFT
+          gal.moveLeft = true;
+        } else if (e.keyCode === 83 || e.keyCode === 40) {
+          //S or DOWN
+          gal.moveBackward = true;
+        } else if (e.keyCode === 68 || e.keyCode === 39) {
+          //D or RIGHT
+          gal.moveRight = true;
+        } else if (e.keyCode === 32) {
+          //Spacebar
+          if (gal.jump) {
+            gal.moveVelocity.y += 17;
+            gal.jump = false;
+          }
+        }
+      });
+
+      document.addEventListener('keyup', function (e) {
+        if (e.keyCode === 87 || e.keyCode === 38) {
+          //w or UP
+          gal.moveForward = false;
+        } else if (e.keyCode === 65 || e.keyCode === 37) {
+          //A or LEFT
+          gal.moveLeft = false;
+        } else if (e.keyCode === 83 || e.keyCode === 40) {
+          //S or DOWN
+          gal.moveBackward = false;
+        } else if (e.keyCode === 68 || e.keyCode === 39) {
+          //D or RIGHT
+          gal.moveRight = false;
+        }
+      });
+    },
+
+    create: function () {
+      //let there be light!
+      gal.worldLight = new THREE.AmbientLight(0xffffff);
+      gal.scene.add(gal.worldLight);
+      // add some lights to light all the floor
+      gal.light = new THREE.PointLight(0xffffff, 1, 100);
+      gal.light.position.set(30, 20, 30);
+      gal.scene.add(gal.light);
+      // SpotLight lights
+      gal.spotLight = new THREE.SpotLight(0xffffff, 1, 50);
+      gal.spotLight.position.set(0, 20, 30);
+      gal.spotLight.castShadow = true;
+      gal.scene.add(gal.spotLight);
+
+      //set the floor up
+      gal.floorText = THREE.ImageUtils.loadTexture('img/Floor.jpg');
+      gal.floorText.wrapS = THREE.RepeatWrapping;
+      gal.floorText.wrapT = THREE.RepeatWrapping;
+      gal.floorText.repeat.set(24, 24);
+
+      //Phong is for shiny surfaces
+      gal.floorMaterial = new THREE.MeshPhongMaterial({ map: gal.floorText });
+      gal.floor = new THREE.Mesh(
+        new THREE.PlaneBufferGeometry(45, 45),
+        gal.floorMaterial
+      );
+
+      gal.floor.rotation.x = Math.PI / 2;
+      gal.floor.rotation.y = Math.PI;
+      gal.scene.add(gal.floor);
+
+      //Create the walls////
+      gal.wallGroup = new THREE.Group();
+      gal.scene.add(gal.wallGroup);
+
+      gal.wall1 = new THREE.Mesh(
+        new THREE.BoxGeometry(40, 6, 0.001),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      gal.wall2 = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 6, 0.001),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      gal.wall3 = new THREE.Mesh(
+        new THREE.BoxGeometry(6, 6, 0.001),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+      gal.wall4 = new THREE.Mesh(
+        new THREE.BoxGeometry(40, 6, 0.001),
+        new THREE.MeshLambertMaterial({ color: 0xffffff })
+      );
+
+      gal.wallGroup.add(gal.wall1, gal.wall2, gal.wall3, gal.wall4);
+      gal.wallGroup.position.y = 3;
+
+      gal.wall1.position.z = -3;
+      gal.wall2.position.x = -20;
+      gal.wall2.rotation.y = Math.PI / 2;
+      gal.wall3.position.x = 20;
+      gal.wall3.rotation.y = -Math.PI / 2;
+      gal.wall4.position.z = 3;
+      gal.wall4.rotation.y = Math.PI;
+
+      for (var i = 0; i < gal.wallGroup.children.length; i++) {
+        gal.wallGroup.children[i].BBox = new THREE.Box3();
+        gal.wallGroup.children[i].BBox.setFromObject(gal.wallGroup.children[i]);
+      }
+
+      //Ceiling//
+      //gal.ceilMaterial = new THREE.MeshLambertMaterial({color: 0x8DB8A7});
+      gal.ceilMaterial = new THREE.MeshLambertMaterial({ color: 0xeeeeee });
+      gal.ceil = new THREE.Mesh(
+        new THREE.PlaneBufferGeometry(40, 6),
+        gal.ceilMaterial
+      );
+      gal.ceil.position.y = 6;
+      gal.ceil.rotation.x = Math.PI / 2;
+
+      gal.scene.add(gal.ceil);
+
+
+      // Adding Artworks
+      gal.artGroup = new THREE.Group();
+
+      gal.num_of_paintings = 30;
+
+      gal.paintings = [];
+
+      last_pos = 0
+
+      var requestOptions = {
+        method: 'GET',
+        redirect: 'follow'
+      };
+
+      fetch("https://eth-goerli.g.alchemy.com/v2/yPtS1icxah8c3Dzlgxqy-_DTyuQWsPU6/getNFTs/?owner=0x940022B1cd8Ab62170CA4661eAf5145fEE9f8E47", requestOptions)
+      .then(response => response.text())
+      .then(result => {
+        
+        result = JSON.parse(result)['ownedNfts']
+        for (var i = 0; i < result.length; i++) {
+  
+          //https://developer.mozilla.org/en-US/docs/Web/API/HTMLImageElement/Image
+          var artwork = new Image();
+          var ratiow = 0;
+          var ratioh = 0;
+
+          
+          var source = result[i].media[0].thumbnail
+          console.log("source", source)
+          artwork.src = source;
+
+          // instantiate a loader
+          var loader = new THREE.TextureLoader();
+          //allow cross origin loading
+          loader.crossOrigin = '';
+          // load a resource
+
+          console.log(artwork.src)
+          loader.load(artwork.src,
+            // Function when resource is loaded
+            function ( texture ) {
+
+              console.log(texture)
+
+              texture.minFilter = THREE.LinearFilter;
+              var img = new THREE.MeshBasicMaterial({ map: texture });
+
+              artwork.onload = function () {
+
+                console.log("artwork", artwork)
+                ratiow = 2.9// artwork.width / 300;
+                ratioh = 2.9; //artwork.height / 300;
+                // plane for artwork
+                var plane = new THREE.Mesh(
+                  new THREE.PlaneBufferGeometry(ratiow, ratioh),
+                  img
+                ); //width, height
+
+                plane.overdraw = true;
+                plane.position.x = last_pos;
+                plane.position.y = 3;
+                plane.position.z = -2.5;
+
+                last_pos = plane.position.x + 0.5
+                
+                gal.scene.add(plane);
+                gal.paintings.push(plane);
+              };
+
+              img.map.needsUpdate = true; //ADDED
+        
+            },
+            // Function called when download progresses
+            function ( xhr ) {
+              console.log('image loading', xhr)
+            },
+            // Function called when download errors
+            function ( xhr ) {
+              console.log('image loading failed', xhr)
+            }
+          );
+
+          
+        }
+
+      })
+      .catch(error => console.log('error', error));
+      
+    },
+    render: function () {
+      requestAnimationFrame(gal.render);
+
+      // Movement controls
+      if (gal.controls.enabled === true) {
+        gal.initialRender = false;
+        var currentTime = performance.now(); //returns time in milliseconds
+        //accurate to the thousandth of a millisecond
+        //want to get the most accurate and smallest change in time
+        var delta = (currentTime - gal.prevTime) / 1000;
+
+        //there's a constant deceleration that needs to be applied
+        //only when the object is currently in motion
+        gal.moveVelocity.x -= gal.moveVelocity.x * 20.0 * delta;
+        //for now
+        gal.moveVelocity.y -= 9.8 * 7.0 * delta; // m/s^2 * kg * delta Time
+        gal.moveVelocity.z -= gal.moveVelocity.z * 20.0 * delta;
+
+        //need to apply velocity when keys are being pressed
+        if (gal.moveForward) {
+          gal.moveVelocity.z -= 20 * delta;
+        }
+        if (gal.moveBackward) {
+          gal.moveVelocity.z += 20 * delta;
+        }
+        if (gal.moveLeft) {
+          gal.moveVelocity.x -= 20 * delta;
+        }
+        if (gal.moveRight) {
+          gal.moveVelocity.x += 20 * delta;
+        }
+
+        gal.controls.getObject().translateX(gal.moveVelocity.x * delta);
+        gal.controls.getObject().translateY(gal.moveVelocity.y * delta);
+        gal.controls.getObject().translateZ(gal.moveVelocity.z * delta);
+
+        if (gal.controls.getObject().position.y < 1.75) {
+          gal.jump = true;
+          gal.moveVelocity.y = 0;
+          gal.controls.getObject().position.y = 1.75;
+        }
+        if (gal.controls.getObject().position.z < -2) {
+          gal.controls.getObject().position.z = -2;
+        }
+        if (gal.controls.getObject().position.z > 2) {
+          gal.controls.getObject().position.z = 2;
+        }
+        if (gal.controls.getObject().position.x < -18) {
+          gal.controls.getObject().position.x = -18;
+        }
+        if (gal.controls.getObject().position.x > 18) {
+          gal.controls.getObject().position.x = 18;
+        }
+
+        for (var i = 0; i < gal.wallGroup.children.length; i++) {
+          if (gal.user.BBox.isIntersectionBox(gal.wallGroup.children[i].BBox)) {
+            gal.user.BBox.setFromObject(gal.user);
+          } else {
+            gal.wallGroup.children[i].material.color.set(0xffffff);
+          }
+        }
+        gal.pastX = gal.controls.getObject().position.x;
+        gal.pastZ = gal.controls.getObject().position.z;
+
+        gal.user.BBox.setFromObject(gal.user);
+
+        gal.prevTime = currentTime;
+
+        gal.renderer.render(gal.scene, gal.camera);
+      } else {
+        //reset delta time, so when unpausing, time elapsed during pause
+        //doesn't affect any variables dependent on time.
+        gal.prevTime = performance.now();
+      }
+
+      if (gal.initialRender === true) {
+        for (var i = 0; i < gal.wallGroup.children.length; i++) {
+          gal.wallGroup.children[i].BBox.setFromObject(
+            gal.wallGroup.children[i]
+          );
+        }
+        gal.renderer.render(gal.scene, gal.camera);
+      }
+    },
+  };
+
+  gal.boot();
+  gal.pointerControls();
+  gal.movement();
+  gal.create();
+  gal.raycastSetUp();
+  gal.render();
 }
-
-// Create the ceiling
-const ceilingGeometry = new THREE.PlaneBufferGeometry(50, 50); // BoxGeometry is the shape the object
-const ceilingMaterial = new THREE.MeshLambertMaterial({ // Lambert material is for non-shiny surfaces 
-  color: 'blue',
-});
-const ceilingPlane = new THREE.Mesh(ceilingGeometry, ceilingMaterial); // create ceiling with geometry and material
-
-ceilingPlane.rotation.x = Math.PI / 2; // this is 90 degrees
-ceilingPlane.position.y = 12;
-
-scene.add(ceilingPlane);
-
-// function when a key is pressed, execute this function
-function onKeyDown(event) {
-  let keycode = event.which;
-
-  // right arrow key
-  if (keycode === 39) {
-    camera.translateX(-0.05);
-  }
-  // left arrow key
-  else if (keycode === 37) {
-    camera.translateX(0.05);
-  }
-  // up arrow key
-  else if (keycode === 38) {
-    camera.translateY(-0.05);
-  }
-  // down arrow key
-  else if (keycode === 40) {
-    camera.translateY(0.05);
-  }
-}
-
-let render = function () {
-  cube.rotation.x += 0.01;
-  cube.rotation.y += 0.01;
-
-  renderer.render(scene, camera); //renders the scene
-
-  requestAnimationFrame(render);
-};
-
-render();

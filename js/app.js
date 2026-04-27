@@ -930,7 +930,7 @@ function setupMovement(){
     );
     raycaster.setFromCamera(mouse, camera);
     const hits=raycaster.intersectObjects(artworkMeshes,false);
-    if(hits.length>0 && hits[0].distance<9){
+    if(hits.length>0 && hits[0].distance<60){
       openArtModal(meshToArtwork.get(hits[0].object.uuid));
     }
   });
@@ -970,7 +970,7 @@ function tickRaycast(){
   // Cast from screen centre
   raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
   const hits=raycaster.intersectObjects(artworkMeshes,false);
-  if(hits.length>0 && hits[0].distance<8){
+  if(hits.length>0 && hits[0].distance<60){
     const id=hits[0].object.uuid;
     if(id!==hoveredId){
       hoveredId=id;
