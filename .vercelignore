@@ -1,0 +1,9 @@
+.git
+.DS_Store
+.claude
+.vscode
+node_modules
+js/Detector.js
+js/PointerLockControls.js
+js/Projector.js
+js/main copy.js

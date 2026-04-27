@@ -1,0 +1,11 @@
+.DS_Store
+.claude/
+.vscode/
+.vercel/
+node_modules/
+dist/
+build/
+js/Detector.js
+js/PointerLockControls.js
+js/Projector.js
+js/main copy.js
