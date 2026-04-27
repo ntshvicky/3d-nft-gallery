@@ -1,44 +1,332 @@
 <!DOCTYPE html>
-<html>
-
+<html lang="en">
 <head>
-    <meta http-equiv="content-type" content="text/html" charset="ISO-8859-1">
-
-    <meta property="og:title" content="Emilian Kasemi's 3D art gallery" />
-    <meta property="og:description" content="Interactive 3D art gallery" />
-    <meta property="og:url" content="https://emilian-kasemi-portfolio-3d.herokuapp.com/" />
-
-    <title>3D Art Gallery</title>
-
-    <link rel="stylesheet" href="./css/style.css">
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MetaGallery — 3D NFT Art Experience</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/index.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+    }
+  }
+  </script>
 </head>
-
 <body>
-    <!-- <div id="background_menu"></div>
-    <div id="menu">
-        <div id="img_container">
-            <img src="./img/starrynight.jpg">
+
+  <!-- LOADER -->
+  <div id="loader">
+    <div class="loader-inner">
+      <div class="loader-logo">
+        <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+          <polygon points="26,3 49,15 49,37 26,49 3,37 3,15" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+          <polygon points="26,11 41,19 41,33 26,41 11,33 11,19" stroke="#c9a84c" stroke-width="0.8" fill="none" opacity="0.5"/>
+          <circle cx="26" cy="26" r="5" fill="#c9a84c" opacity="0.9"/>
+          <circle cx="26" cy="26" r="2" fill="#fff"/>
+        </svg>
+        <span class="ll-text">META<strong>GALLERY</strong></span>
+      </div>
+      <div class="loader-track"><div class="loader-fill" id="loader-fill"></div></div>
+      <p class="loader-msg" id="loader-msg">Initializing 3D engine…</p>
+    </div>
+  </div>
+
+  <!-- LANDING PAGE -->
+  <div id="landing" class="screen hidden">
+    <canvas id="bg-canvas"></canvas>
+    <div class="landing-veil"></div>
+    <div class="landing-content">
+      <div class="landing-eyebrow">
+        <span class="dot gold-dot"></span> Web3 · NFT · Immersive 3D
+        <span class="dot gold-dot"></span>
+      </div>
+      <h1 class="landing-title">Meta<span class="gold">Gallery</span></h1>
+      <p class="landing-sub">
+        Step inside a living museum. Discover timeless masterpieces &amp; cutting-edge<br>
+        digital art — discover, collect and sell — all powered by blockchain.
+      </p>
+      <div class="landing-stats">
+        <div class="ls-item">
+          <span class="ls-num" id="stat-count">12</span>
+          <span class="ls-label">Artworks</span>
         </div>
-        <div id="content">
-            <h1>3D Art Gallery <br> in 3D</h1>
-            <div>
-                <p>This is an interactive 3D gallery.</p>
-                <p>Made with Three.js</p>
-            </div>
-            <div>
-                <p>Instructions:</p>
-                <p>Arrow Keys or W/A/S/D to Move Around</p>
-                <p>Mouse to Look Around</p>
-            </div>
-            <div id="play_button">
-                <p>EXPLORE ART</p>
-            </div>
-        </div> -->
+        <div class="ls-sep"></div>
+        <div class="ls-item">
+          <span class="ls-num">ETH</span>
+          <span class="ls-label">Powered</span>
+        </div>
+        <div class="ls-sep"></div>
+        <div class="ls-item">
+          <span class="ls-num">3D</span>
+          <span class="ls-label">Immersive</span>
+        </div>
+      </div>
+      <div class="landing-actions">
+        <button class="btn-cta" id="open-wallet-btn">
+          <svg width="18" height="18" viewBox="0 0 48 48" fill="none" style="flex-shrink:0"><polygon points="24,2 46,13 46,35 24,46 2,35 2,13" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="24" cy="24" r="5" fill="currentColor"/></svg>
+          Connect Wallet
+        </button>
+        <button class="btn-preview" id="guest-preview-btn">Preview Gallery</button>
+      </div>
+      <p class="landing-footnote">MetaMask · Coinbase Wallet · Any EIP-1193 wallet · No sign-up required</p>
+    </div>
+  </div>
+
+  <!-- WALLET SELECTION MODAL -->
+  <div id="wallet-modal" class="backdrop hidden">
+    <div class="modal wallet-modal">
+      <button class="modal-x" id="wm-close">✕</button>
+      <div class="modal-header">
+        <svg width="36" height="36" viewBox="0 0 52 52" fill="none">
+          <polygon points="26,3 49,15 49,37 26,49 3,37 3,15" stroke="#c9a84c" stroke-width="1.5" fill="none"/>
+          <circle cx="26" cy="26" r="5" fill="#c9a84c"/>
+        </svg>
+        <h2>Connect Your Wallet</h2>
+        <p>Choose a wallet to enter the MetaGallery</p>
+      </div>
+      <div class="wallet-list">
+        <button class="wallet-row" id="btn-metamask">
+          <span class="w-icon">🦊</span>
+          <span class="w-details">
+            <strong>MetaMask</strong>
+            <small>Most popular browser extension wallet</small>
+          </span>
+          <span class="w-arrow">→</span>
+        </button>
+        <button class="wallet-row" id="btn-coinbase">
+          <span class="w-icon cb-icon">●</span>
+          <span class="w-details">
+            <strong>Coinbase Wallet</strong>
+            <small>Simple, secure &amp; beginner-friendly</small>
+          </span>
+          <span class="w-arrow">→</span>
+        </button>
+        <button class="wallet-row" id="btn-other">
+          <span class="w-icon">⬡</span>
+          <span class="w-details">
+            <strong>Other Wallet</strong>
+            <small>Any EIP-1193 compatible wallet</small>
+          </span>
+          <span class="w-arrow">→</span>
+        </button>
+      </div>
+      <p class="wallet-note">🔒 We never store your private keys or personal data.</p>
+    </div>
+  </div>
+
+  <!-- THREE.JS CANVAS CONTAINER -->
+  <div id="canvas-wrap" class="hidden"></div>
+
+  <!-- GALLERY HUD (in-gallery overlay) -->
+  <div id="gallery-hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-brand">
+        <svg width="20" height="20" viewBox="0 0 52 52" fill="none"><polygon points="26,3 49,15 49,37 26,49 3,37 3,15" stroke="#c9a84c" stroke-width="2" fill="none"/><circle cx="26" cy="26" r="5" fill="#c9a84c"/></svg>
+        MetaGallery
+      </div>
+      <div class="hud-right">
+        <button class="hud-btn gold-btn" id="hud-add-btn">＋ Add Art</button>
+        <div class="hud-wallet" id="hud-wallet">
+          <span class="w-dot"></span>
+          <span id="hud-addr">0x000…0000</span>
+        </div>
+        <button class="hud-btn hud-exit" id="hud-exit" title="Exit gallery">✕</button>
+      </div>
     </div>
 
-    <script src="js/three.js"></script>
-    <script src="js/main.js"></script>
-</body>
+    <div class="crosshair">
+      <div class="ch-h"></div>
+      <div class="ch-v"></div>
+    </div>
 
+    <div class="interact-hint hidden" id="interact-hint">
+      <div class="ih-icon">◈</div>
+      <span id="ih-text">Click to view artwork</span>
+    </div>
+
+    <div class="hud-controls" id="hud-controls">
+      <kbd>W A S D</kbd> Move &nbsp;·&nbsp;
+      <kbd>Mouse</kbd> Look &nbsp;·&nbsp;
+      <kbd>Click</kbd> Interact &nbsp;·&nbsp;
+      <kbd>ESC</kbd> Pause
+    </div>
+
+    <div class="hud-network" id="hud-network">
+      <span class="net-dot"></span>
+      <span id="hud-net">Ethereum</span>
+    </div>
+
+    <aside class="market-panel">
+      <div class="mp-title">Collection</div>
+      <div class="mp-grid">
+        <div><span id="market-total">12</span><small>Items</small></div>
+        <div><span id="market-listed">9</span><small>Listed</small></div>
+        <div><span id="market-floor">1.80 ETH</span><small>Floor</small></div>
+        <div><span id="market-volume">53.5 ETH</span><small>Est. Value</small></div>
+      </div>
+      <div class="mp-title mp-activity-title">Activity</div>
+      <div class="activity-feed" id="activity-feed"></div>
+    </aside>
+  </div>
+
+  <!-- PAUSE MENU -->
+  <div id="pause-overlay" class="hidden">
+    <div class="pause-card">
+      <div class="pause-icon">
+        <svg width="40" height="40" viewBox="0 0 52 52" fill="none"><polygon points="26,3 49,15 49,37 26,49 3,37 3,15" stroke="#c9a84c" stroke-width="1.5" fill="none"/><circle cx="26" cy="26" r="5" fill="#c9a84c"/></svg>
+      </div>
+      <h2>Gallery Paused</h2>
+      <p>Click anywhere or press <kbd>Esc</kbd> to resume</p>
+      <div class="pause-actions">
+        <button class="btn-primary" id="pause-resume">▶ Resume</button>
+        <button class="btn-ghost" id="pause-add">＋ Add Artwork</button>
+        <button class="btn-danger" id="pause-disconnect">Disconnect Wallet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ART DETAIL MODAL -->
+  <div id="art-modal" class="backdrop hidden">
+    <div class="modal art-modal">
+      <button class="modal-x" id="art-close">✕</button>
+      <div class="art-modal-layout">
+        <div class="art-img-wrap">
+          <img id="art-img" src="" alt="" crossorigin="anonymous">
+          <div class="art-frame-deco"></div>
+        </div>
+        <div class="art-details">
+          <div class="art-badges">
+            <span class="art-sale-badge" id="art-sale-badge">For Sale</span>
+          </div>
+          <h2 class="art-name" id="art-name">Artwork Title</h2>
+          <p class="art-by" id="art-by">by Artist · Year</p>
+          <p class="art-desc" id="art-desc">Description of the artwork.</p>
+          <div class="art-meta-grid">
+            <div class="amg-item">
+              <span class="amg-lbl">Owner</span>
+              <span class="amg-val mono" id="art-owner">—</span>
+            </div>
+            <div class="amg-item">
+              <span class="amg-lbl">Network</span>
+              <span class="amg-val" id="art-chain">Ethereum</span>
+            </div>
+            <div class="amg-item">
+              <span class="amg-lbl">Contract</span>
+              <span class="amg-val mono" id="art-contract">—</span>
+            </div>
+            <div class="amg-item">
+              <span class="amg-lbl">Token ID</span>
+              <span class="amg-val mono" id="art-token">—</span>
+            </div>
+            <div class="amg-item">
+              <span class="amg-lbl">Royalty</span>
+              <span class="amg-val" id="art-royalty">—</span>
+            </div>
+            <div class="amg-item">
+              <span class="amg-lbl">Standard</span>
+              <span class="amg-val" id="art-standard">ERC-721</span>
+            </div>
+          </div>
+          <div class="provenance-card">
+            <div class="pc-head">
+              <span>Provenance</span>
+              <strong id="art-verified">Verified</strong>
+            </div>
+            <div id="art-provenance" class="provenance-list"></div>
+          </div>
+          <div class="art-buy-row">
+            <div class="art-price-block">
+              <span class="apb-lbl">Current Price</span>
+              <span class="apb-val" id="art-price">— ETH</span>
+            </div>
+            <button class="btn-buy" id="btn-buy">Buy Now</button>
+          </div>
+          <div class="art-secondary-actions">
+            <button class="btn-sm-ghost" id="btn-share">↗ Share</button>
+            <button class="btn-sm-ghost" id="btn-etherscan">⬡ Etherscan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADD ARTWORK MODAL -->
+  <div id="add-modal" class="backdrop hidden">
+    <div class="modal add-modal">
+      <button class="modal-x" id="add-close">✕</button>
+      <h2 class="modal-title">Add Your Artwork</h2>
+      <p class="modal-sub">Showcase your digital art in the MetaGallery</p>
+      <form id="add-form" novalidate>
+        <div class="fg">
+          <label>Image URL <span class="req">*</span></label>
+          <input type="url" id="f-url" placeholder="https://example.com/my-art.jpg" required>
+          <small>Must be a direct image URL with CORS headers enabled</small>
+        </div>
+        <div class="fg">
+          <label>Title <span class="req">*</span></label>
+          <input type="text" id="f-title" placeholder="Name your masterpiece" required maxlength="80">
+        </div>
+        <div class="fg">
+          <label>Artist Name</label>
+          <input type="text" id="f-artist" placeholder="Your name or pseudonym" maxlength="60">
+        </div>
+        <div class="fg">
+          <label>Description</label>
+          <textarea id="f-desc" rows="3" placeholder="The story behind your art…" maxlength="400"></textarea>
+        </div>
+        <div class="fg-row">
+          <div class="fg">
+            <label>Price (ETH)</label>
+            <input type="number" id="f-price" placeholder="0.5" step="0.001" min="0" max="10000">
+          </div>
+          <div class="fg toggle-fg">
+            <label>List for Sale</label>
+            <label class="toggle">
+              <input type="checkbox" id="f-forsale" checked>
+              <span class="tslider"></span>
+            </label>
+          </div>
+        </div>
+        <div class="fg-row nft-fields">
+          <div class="fg">
+            <label>Contract Address</label>
+            <input type="text" id="f-contract" placeholder="0x... or auto-generated" maxlength="42">
+          </div>
+          <div class="fg">
+            <label>Token ID</label>
+            <input type="text" id="f-token" placeholder="Auto" maxlength="32">
+          </div>
+        </div>
+        <div class="fg-row nft-fields">
+          <div class="fg">
+            <label>Creator Royalty (%)</label>
+            <input type="number" id="f-royalty" placeholder="7.5" step="0.1" min="0" max="15">
+          </div>
+          <div class="fg">
+            <label>Token Standard</label>
+            <select id="f-standard">
+              <option value="ERC-721">ERC-721</option>
+              <option value="ERC-1155">ERC-1155</option>
+            </select>
+          </div>
+        </div>
+        <div id="add-preview" class="add-preview hidden">
+          <img id="preview-img" src="" alt="preview" crossorigin="anonymous">
+          <span class="preview-label">Preview</span>
+        </div>
+        <button type="submit" class="btn-primary btn-full">✦ Add to Gallery</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATIONS -->
+  <div id="toasts"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
 </html>
